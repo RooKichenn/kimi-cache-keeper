@@ -1,5 +1,7 @@
 # kimi-cache-keeper
 
+> 💡 **OpenCode CLI 用户 / AI Agent**：如果你使用的是 OpenCode CLI，请直接查阅 [opencode-plugin/README-opencode-kimi-cache-keeper.md](opencode-plugin/README-opencode-kimi-cache-keeper.md) 获取专属插件安装与配置指南。
+
 一个 Kimi Code CLI 的 Skill:通过定时发送轻量"保活"消息,维持当前会话的服务端 prompt 缓存,让长时间挂着的会话不至于每次开口都全量重算输入,从而降低 token 成本。
 
 ## 原理
@@ -66,6 +68,10 @@ Kimi Code 的服务端对输入做前缀缓存:两次请求的前缀一致且间
 
 ## 安装
 
+### OpenCode CLI
+请直接查阅 [opencode-plugin/README-opencode-kimi-cache-keeper.md](opencode-plugin/README-opencode-kimi-cache-keeper.md)。
+
+### Kimi Code CLI
 把本仓库克隆到用户级 skills 目录:
 
 ```bash
@@ -74,7 +80,7 @@ git clone https://github.com/RooKichenn/kimi-cache-keeper ~/.kimi-code/skills/ca
 
 Windows (Git Bash) 同样适用,`~` 会自动指向用户目录。重启 CLI 或新开会话后即可使用。
 
-## 用法
+## 用法 (Kimi Code CLI)
 
 在任意会话中:
 
@@ -110,8 +116,9 @@ Windows (Git Bash) 同样适用,`~` 会自动指向用户目录。重启 CLI 或
 
 ```
 kimi-cache-keeper/
-├── SKILL.md   # Skill 本体:操作手册 + 两种模式的固定保活文本
-└── README.md  # 本文件
+├── opencode-plugin/  # OpenCode CLI 插件与专属安装指南
+├── SKILL.md          # Skill 本体:操作手册 + 两种模式的固定保活文本
+└── README.md         # 本文件
 ```
 
 ## 示例
