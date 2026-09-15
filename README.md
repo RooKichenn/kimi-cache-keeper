@@ -118,6 +118,14 @@ kimi-cache-keeper/
 保活机制启动后，过了很久，我让kimi把对话总结为md文档，可以看到额度消耗依旧是0.01%，而不是缓存过期后的0.1%~0.15%
 <img width="759" height="574" alt="image" src="https://github.com/user-attachments/assets/b58f25d0-55bd-4c0a-93d9-8207fa8680f4" />
 
+## 贡献者
+
+感谢以下社区贡献者(按贡献时间排序):
+
+- **[bearchild233](https://github.com/bearchild233)**:将保活思路移植到 opencode CLI(插件实现),其"不为冷会话付费重启"的策略反哺为本项目的 retire(冷会话自动退休)功能
+- **[BigWei926](https://github.com/BigWei926)**:设计并实现 v2(cache-keeper2)的"活动锚定 smart 模式"——回合开始删任务、回合结束重建,将保活时机从"墙钟/上一次触发"升级为锚定真实对话活动,对话期间零触发
+
+也欢迎通过 Issue / PR 参与改进。
 
 ## 免责声明
 
