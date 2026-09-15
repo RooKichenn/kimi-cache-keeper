@@ -58,17 +58,27 @@ v1 的两种模式有一个共同盲点:触发时机锚定的是**墙钟或上�
 
 **代价与适用场景**:每轮对话多约 3 次工具调用(开始 CronDelete + 结束 date + CronCreate)。低频对话、长任务多的场景净收益为正(省掉的是每次整段上下文的保活请求);高频碎碎念对话时可能得不偿失,建议切回定点循环。回合被中断(Escape、崩溃)时可能"已删未建"导致静默断链,偶尔 `status` 抽查即可发现;上下文压缩后若模型遗忘维护义务,会优雅退化为 v1 smart 的纯链式行为。
 
-retire 仅支持定点循环模式;smart 模式不支持(retire 依赖循环任务信封里的 `coalescedCount`)。
-
 ## 安装
 
-把本仓库克隆到用户级 skills 目录:
+v1 直接把本仓库克隆到用户级 skills 目录(仓库根的 `SKILL.md` 即 v1 本体):
 
 ```bash
 git clone https://github.com/RooKichenn/kimi-cache-keeper ~/.kimi-code/skills/cache-keeper
 ```
 
-Windows (Git Bash) 同样适用,`~` 会自动指向用户目录。重启 CLI 或新开会话后即可使用。
+v2(cache-keeper2)需要把仓库内的 `cache-keeper2/` 目录作为独立 skill 链接到 skills 目录(扫描器只认一层子目录,嵌套在仓库里不会被发现):
+
+```bash
+# macOS / Linux
+ln -s ~/.kimi-code/skills/cache-keeper/cache-keeper2 ~/.kimi-code/skills/cache-keeper2
+```
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Junction -Path "$env:USERPROFILE\.kimi-code\skills\cache-keeper2" -Target "$env:USERPROFILE\.kimi-code\skills\cache-keeper\cache-keeper2"
+```
+
+Windows (Git Bash) 中 `~` 会自动指向用户目录。装好后重启 CLI 或新开会话即可使用。
 
 ## 用法
 
@@ -84,6 +94,8 @@ Windows (Git Bash) 同样适用,`~` 会自动指向用户目录。重启 CLI 或
 /cache-keeper refresh        # 定点循环 7 天过期后续期重建(链式不需要)
 /cache-keeper off            # 关闭保活
 ```
+
+以上为 v1 命令;v2 命令(`/cache-keeper2 ...`)见上一节,安装 v2 后可用。
 
 ## 必须知道的限制
 
@@ -115,6 +127,7 @@ kimi-cache-keeper/
 ```
 
 ## 示例
+
 保活机制启动后，过了很久，我让kimi把对话总结为md文档，可以看到额度消耗依旧是0.01%，而不是缓存过期后的0.1%~0.15%
 <img width="759" height="574" alt="image" src="https://github.com/user-attachments/assets/b58f25d0-55bd-4c0a-93d9-8207fa8680f4" />
 
