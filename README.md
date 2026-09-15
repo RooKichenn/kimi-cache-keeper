@@ -54,7 +54,7 @@ git clone https://github.com/RooKichenn/kimi-cache-keeper ~/.kimi-code/skills/ca
 
 Windows (Git Bash) 中 `~` 会自动指向用户目录。装好后重启 CLI 或新开会话即可使用。
 
-> 注:原 v2(cache-keeper2)的 smart 模式经实测稳定后已并入 v1,`cache-keeper2/` 目录仅作历史保留(已标记 deprecated),**新用户无需安装**。已安装 v2 的用户行为与 v1 smart 完全一致,建议切换为 `/cache-keeper on smart` 后删除 cache-keeper2 的链接。
+> 注:原 v2(cache-keeper2)的 smart 模式经实测稳定后已并入 v1,v2 目录已从仓库移除。之前安装过 cache-keeper2 的用户:删除其链接(`~/.kimi-code/skills/cache-keeper2`),此后直接使用 `/cache-keeper on smart` 即可,行为完全一致。
 
 ## 用法
 
@@ -96,8 +96,6 @@ Windows (Git Bash) 中 `~` 会自动指向用户目录。装好后重启 CLI 或
 ```
 kimi-cache-keeper/
 ├── SKILL.md              # Skill 本体:操作手册 + 两种模式的固定保活文本
-├── cache-keeper2/
-│   └── SKILL.md          # 原 v2(deprecated):smart 模式已并入 v1,仅作历史保留
 └── README.md             # 本文件
 ```
 
