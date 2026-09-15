@@ -10,15 +10,21 @@ Kimi Code 的服务端对输入做前缀缓存:两次请求的前缀一致且间
 
 ## 两种模式
 
-| 维度 | 定点循环(默认) | 链式 smart |
+| 维度 | 定点循环(默认) | 重置链式 smart |
 | --- | --- | --- |
-| 机制 | 一个 `*/N * * * *` 循环任务 | 一次性任务自我续链,每跳重建"当前时间 + N 分钟" |
-| 触发基准 | 墙钟整点刻,与活动无关 | 相对计时:最后一次触发 + N 分钟 |
-| 浪费来源 | 每段忙碌期结束白送一跳(单次约 0.01% 月额度,可忽略) | 几乎为零 |
-| 健壮性 | 高:调度器兜底,单次失败不影响后续 | 低:任一跳重建失败即**静默断链**,无告警 |
-| 7 天过期 | 有,需 `refresh` 续期 | 无,链条自我延续 |
+| 机制 | 一个 `*/N * * * *` 循环任务 | 一次性任务 + 每轮维护:回合开始先删等待中的任务,回合结束重建"当前时间 + N 分钟" |
+| 触发基准 | 墙钟整点刻,与活动无关 | 最后一次对话活动 + N 分钟,连续无对话才触发 |
+| 浪费来源 | 每段忙碌期结束白送一跳(单次约 0.01% 月额度,可忽略) | 对话期间零触发、零补投;代价是每轮约 3 次工具调用的维护开销 |
+| 健壮性 | 高:调度器兜底,单次失败不影响后续 | 中:回合中断可能"已删未建"静默断链;模型遗忘维护义务时退化为纯链式续跳,不会更坏 |
+| 7 天过期 | 有,需 `refresh` 续期 | 无,任务随对话活动持续重建 |
 
-**结论**:日常用定点循环——浪费可量化、有上限、极便宜,"不会死"是它最大的优点。链式适合长会话、长任务极频繁、且愿意偶尔 `status` 抽查的场景。两者随时可用 `off` 后重新 `on` 切换。
+smart(重置链式)的三段机制:
+
+1. **回合开始删任务**:每轮对话开始处理用户消息前,模型先静默删除等待中的保活任务——本轮期间不存在任何到点触发,从根上消除"输出完立刻补投"
+2. **回合结束建下一跳**:回复发送前执行 `date + CronCreate`,把下一次触发重建为"当前时间 + N 分钟"
+3. **触发续链**:连续 N 分钟无对话时任务才触发,触发后自建下一跳
+
+**结论**:高频碎碎念对话用定点循环——浪费可量化、有上限、极便宜,"不会死"是它最大的优点;低频对话、长任务多的场景用 smart——省掉的是每次整段上下文的保活请求。两者随时可用 `off` 后重新 `on` 切换。
 
 ## 上下文占用
 
@@ -36,49 +42,19 @@ Kimi Code 的服务端对输入做前缀缓存:两次请求的前缀一致且间
 
 默认 4 小时是盈亏平衡点(按实测:缓存命中约 0.01%/跳、冷启动约 0.1%~0.15%),也高于绝大多数长任务时长。实现上利用 cron 信封携带的 `coalescedCount`(= 闲置时长 ÷ 间隔)判断闲置,超阈值先自删再回复。两点如实说明:**超长任务与离线无法区分**,任务经常超过 4 小时就调高时长或 `retire off`;**resume 当下的那一跳躲不掉**,retire 保证它是最后一跳。
 
-该设计思想移植自社区 fork([bearchild233](https://github.com/bearchild233) 的 opencode 插件版)中"不为冷会话付费重启"的策略,感谢原作者。retire 仅支持定点循环模式(链式任务的信封不含累计计数)。
-
-## v2:cache-keeper2(活动锚定 smart)
-
-v1 的两种模式有一个共同盲点:触发时机锚定的是**墙钟或上一次保活触发**,而不是你的对话——聊天聊到一半它照样按自己的节奏触发(coalesced 到回合空隙补投),那次请求就是纯浪费。
-
-`cache-keeper2/SKILL.md` 是 v2 版本,定点循环模式与 v1 完全一致,**smart 模式升级为"重置链式"**:
-
-1. **回合开始删任务**:每轮对话开始处理用户消息前,模型先静默删除等待中的保活任务——本轮期间不存在任何到点触发,从根上消除"输出完立刻补投"
-2. **回合结束建下一跳**:回复发送前执行 `date + CronCreate`,把下一次触发重建为"当前时间 + N 分钟"
-3. **触发续链**:与 v1 smart 相同——连续 N 分钟无对话才触发,触发后自建下一跳
-
-效果:保活只在**连续 N 分钟无对话活动**后触发,对话期间零触发、零补投。
-
-```
-/cache-keeper2 smart         # 重置链式,15 分钟(也可 /cache-keeper2 on 15 smart)
-/cache-keeper2 on            # 定点循环,与 v1 相同(默认 4 小时自动退休)
-/cache-keeper2 status / off  # 查看 / 关闭
-```
-
-**代价与适用场景**:每轮对话多约 3 次工具调用(开始 CronDelete + 结束 date + CronCreate)。低频对话、长任务多的场景净收益为正(省掉的是每次整段上下文的保活请求);高频碎碎念对话时可能得不偿失,建议切回定点循环。回合被中断(Escape、崩溃)时可能"已删未建"导致静默断链,偶尔 `status` 抽查即可发现;上下文压缩后若模型遗忘维护义务,会优雅退化为 v1 smart 的纯链式行为。
+该设计思想移植自社区 fork([bearchild233](https://github.com/bearchild233) 的 opencode 插件版)中"不为冷会话付费重启"的策略,感谢原作者。retire 仅支持定点循环模式(smart 任务的信封不含累计计数)。
 
 ## 安装
 
-v1 直接把本仓库克隆到用户级 skills 目录(仓库根的 `SKILL.md` 即 v1 本体):
+直接把本仓库克隆到用户级 skills 目录(仓库根的 `SKILL.md` 即 Skill 本体):
 
 ```bash
 git clone https://github.com/RooKichenn/kimi-cache-keeper ~/.kimi-code/skills/cache-keeper
 ```
 
-v2(cache-keeper2)需要把仓库内的 `cache-keeper2/` 目录作为独立 skill 链接到 skills 目录(扫描器只认一层子目录,嵌套在仓库里不会被发现):
-
-```bash
-# macOS / Linux
-ln -s ~/.kimi-code/skills/cache-keeper/cache-keeper2 ~/.kimi-code/skills/cache-keeper2
-```
-
-```powershell
-# Windows (PowerShell)
-New-Item -ItemType Junction -Path "$env:USERPROFILE\.kimi-code\skills\cache-keeper2" -Target "$env:USERPROFILE\.kimi-code\skills\cache-keeper\cache-keeper2"
-```
-
 Windows (Git Bash) 中 `~` 会自动指向用户目录。装好后重启 CLI 或新开会话即可使用。
+
+> 注:原 v2(cache-keeper2)的 smart 模式经实测稳定后已并入 v1,`cache-keeper2/` 目录仅作历史保留(已标记 deprecated),**新用户无需安装**。已安装 v2 的用户行为与 v1 smart 完全一致,建议切换为 `/cache-keeper on smart` 后删除 cache-keeper2 的链接。
 
 ## 用法
 
@@ -88,21 +64,20 @@ Windows (Git Bash) 中 `~` 会自动指向用户目录。装好后重启 CLI 或
 /cache-keeper on             # 定点循环,15 分钟 + 默认 4 小时自动退休
 /cache-keeper on 12          # 定点循环,自定义间隔(分钟)
 /cache-keeper on retire off  # 定点循环,关闭自动退休
-/cache-keeper on smart       # 链式模式,每 15 分钟
-/cache-keeper on 12 smart    # 链式模式,自定义间隔
+/cache-keeper on smart       # 重置链式(活动锚定),15 分钟
+/cache-keeper on 12 smart    # 重置链式,自定义间隔
 /cache-keeper status         # 查看保活任务状态(可省略为 /cache-keeper)
-/cache-keeper refresh        # 定点循环 7 天过期后续期重建(链式不需要)
+/cache-keeper refresh        # 定点循环 7 天过期后续期重建(smart 不需要)
 /cache-keeper off            # 关闭保活
 ```
-
-以上为 v1 命令;v2 命令(`/cache-keeper2 ...`)见上一节,安装 v2 后可用。
 
 ## 必须知道的限制
 
 - **绑定会话**:定时任务只活在创建它的那个会话里。新开会话需重新 `on`;CLI 关闭期间不触发,`--resume` 恢复同一会话后自动继续。
-- **7 天过期**(仅定点循环):循环任务在创建 7 天后被系统自动过期,执行一次 `/cache-keeper refresh` 即可重置周期。链式模式无此问题。
+- **7 天过期**(仅定点循环):循环任务在创建 7 天后被系统自动过期,执行一次 `/cache-keeper refresh` 即可重置周期。smart 模式无此问题。
 - **retire 误判风险**(定点循环,默认 4 小时):超长任务与离线都会产生大 `coalescedCount`,任务经常超过 4 小时就调高时长或 `retire off`;resume 当下的补发无法避免,retire 保证它是最后一次。
-- **静默断链**(仅链式):某一跳重建失败则链条中断且无告警,建议偶尔 `status` 抽查。
+- **静默断链**(仅 smart):回合被中断(Escape、崩溃)可能"已删未建",触发续链失败同样断链,均无告警,建议偶尔 `status` 抽查;上下文压缩后若模型遗忘维护义务,会退化为纯链式续跳。
+- **smart 的维护开销**:每轮对话约 3 次工具调用(开始 CronDelete + 结束 date + CronCreate),高频连续对话时可能得不偿失,建议切回定点循环。
 - **只在空闲时触发**:正在跑长任务时不会打断,顺延到任务结束后的空闲点合并触发。
 - **效果无法从客户端保证**:缓存窗口是服务端行为、随负载波动;命中率没有客户端标志位,只能通过用量明细(每次请求的扣费幅度)间接观察。
 - **保活本身有微小开销**:每次触发是一次极短的模型请求,正常间隔下远低于缓存过期后全量重算的成本。
@@ -120,9 +95,9 @@ Windows (Git Bash) 中 `~` 会自动指向用户目录。装好后重启 CLI 或
 
 ```
 kimi-cache-keeper/
-├── SKILL.md              # v1 Skill 本体:操作手册 + 两种模式的固定保活文本
+├── SKILL.md              # Skill 本体:操作手册 + 两种模式的固定保活文本
 ├── cache-keeper2/
-│   └── SKILL.md          # v2:smart 模式升级为"每轮对话后重置计时器"
+│   └── SKILL.md          # 原 v2(deprecated):smart 模式已并入 v1,仅作历史保留
 └── README.md             # 本文件
 ```
 
@@ -136,7 +111,7 @@ kimi-cache-keeper/
 感谢以下社区贡献者(按贡献时间排序):
 
 - **[bearchild233](https://github.com/bearchild233)**:将保活思路移植到 opencode CLI(插件实现),其"不为冷会话付费重启"的策略反哺为本项目的 retire(冷会话自动退休)功能
-- **[BigWei926](https://github.com/BigWei926)**:设计并实现 v2(cache-keeper2)的"活动锚定 smart 模式"——回合开始删任务、回合结束重建,将保活时机从"墙钟/上一次触发"升级为锚定真实对话活动,对话期间零触发
+- **[BigWei926](https://github.com/BigWei926)**:设计并实现"活动锚定 smart 模式"(原 v2 cache-keeper2)——回合开始删任务、回合结束重建,将保活时机从"墙钟/上一次触发"升级为锚定真实对话活动,对话期间零触发;经实测稳定后已并入 v1 的 smart 模式
 
 也欢迎通过 Issue / PR 参与改进。
 
