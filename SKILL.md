@@ -13,9 +13,9 @@ arguments:
 
 你在**当前会话**中直接操作 cron 工具完成任务。**禁止派子代理**——缓存绑定主会话前缀,子代理是独立上下文,派子代理执行本 skill(包括建任务这类"杂活")完全无效或得不偿失,一律内联执行。
 
-用户意图由参数给出:`action` = `$action`(on / off / status / refresh,省略时视为 status),`interval` = `$interval`(分钟,仅 on 时使用,默认 15),`mode` = `$mode`(仅 on 时使用;值为 `smart` 时启用重置链式模式,省略则为定点循环模式)。
+用户意图由参数给出:`action` = `$action`(on / off / status / refresh,省略时视为 status),`interval` = `$interval`(分钟,仅 on 时使用,默认 20),`mode` = `$mode`(仅 on 时使用;值为 `smart` 时启用重置链式模式,省略则为定点循环模式)。
 
-参数位置容错(按用户习惯兼容):若 `$action` 为 `smart`(如 `/cache-keeper smart`),视为 `on smart`,间隔取 `$interval`(缺省 15);若 `$action` 为 `on` 且 `$interval` 为 `smart`(如 `/cache-keeper on smart`),视为 `on smart`、间隔默认 15。
+参数位置容错(按用户习惯兼容):若 `$action` 为 `smart`(如 `/cache-keeper smart`),视为 `on smart`,间隔取 `$interval`(缺省 20);若 `$action` 为 `on` 且 `$interval` 为 `smart`(如 `/cache-keeper on smart`),视为 `on smart`、间隔默认 20。
 
 **自动退休(retire)默认开启**:定点循环模式默认带 4 小时退休阈值。从完整参数 `$ARGUMENTS` 中解析:`retire <时长>`(如 `retire 4h`、`retire 480m`)覆盖默认时长;`retire off` 或 `no-retire` 显式关闭;smart 模式不支持 retire(一次性任务信封不含累计计数)。详见下文退休条款。
 
@@ -43,7 +43,7 @@ arguments:
 例外条款:如果本条消息信封中的 coalescedCount ≥ <K>(约 <H> 无活动),先调用 CronDelete 删除本任务实现自动退休(不为冷会话继续付费),然后回复"收到"。
 ```
 
-- `<K>` = 退休时长 ÷ 间隔,向上取整(默认 4h ÷ 15min = 16)
+- `<K>` = 退休时长 ÷ 间隔,向上取整(默认 4h ÷ 20min = 12)
 - `<H>` = 退休时长的人类可读写法(如"4 小时")
 - 显式指定的 retire 时长 < 4 小时时,提醒用户误伤风险并确认(忙碌与离线都会推高 coalescedCount,无法区分);默认 4 小时无需确认
 - retire 仅支持定点循环;smart 任务的信封不含累计计数,无法使用
@@ -82,7 +82,7 @@ smart 模式使用文本 B,创建第一跳时把 `<N>` 替换为实际间隔分�
 ### on — 开启保活
 
 1. 先调用 `CronList`。若已存在 prompt 含"缓存维护消息"的任务(任一模式),告知用户已在运行(报告 id、模式、下次触发时间),不要重复创建,直接结束。
-2. 确定间隔 N:`$interval` 为数字则使用,否则用 15。小于 5 或大于 60 时先向用户确认。
+2. 确定间隔 N:`$interval` 为数字则使用,否则用 20。小于 5 或大于 60 时先向用户确认。
 3. 处理 retire(仅定点循环):从 `$ARGUMENTS` 解析——含 `retire off` / `no-retire` 则关闭;含 `retire <时长>` 则用指定时长(时长 < 4 小时时提醒误伤风险并确认);均未出现则**默认启用,时长 4 小时**。启用时计算 K = 时长 ÷ N 向上取整。
 4. `$mode` 为 `smart` 时走重置链式(步骤 6),否则走定点循环(步骤 5)。
 5. **定点循环**:调用 `CronCreate`(`cron`: `*/N * * * *`,`recurring`: true;`prompt`: 未启用 retire 用文本 A,启用则用"文本 A + 退休条款")。
